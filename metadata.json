@@ -1,0 +1,5 @@
+{
+  "name": "MikroTik Billing System",
+  "description": "A modern, responsive web interface for managing a MikroTik billing system. It provides a comprehensive dashboard for monitoring users, managing billing plans, and viewing financial reports.",
+  "requestFramePermissions": []
+}
