@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
-import db from '../db';
+import pool from '../db';
 import authMiddleware, { AuthRequest } from '../authMiddleware';
 
 const router = Router();
@@ -14,49 +14,60 @@ router.post('/register', async (req, res) => {
     if (!name || !email || !password || !tenantName) {
         return res.status(400).json({ message: 'All fields are required.' });
     }
+    
+    // A client must be checked out from the pool for a transaction.
+    const client = await pool.connect();
 
     try {
-        // Check if user already exists
-        const existingUser = await db.query('SELECT * FROM users WHERE email = $1', [email]);
+        // Check if user already exists. This is done before the transaction starts.
+        // The unique constraint on the email column is the ultimate guarantee.
+        const existingUser = await client.query('SELECT * FROM users WHERE email = $1', [email]);
         if (existingUser.rows.length > 0) {
+            // Use return to stop execution and send response
             return res.status(409).json({ message: 'User with this email already exists.' });
         }
 
         // Hash password
         const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
 
-        // Create tenant and user in a transaction
-        const client = await db.query('BEGIN');
-        try {
-            const tenantResult = await db.query(
-                'INSERT INTO tenants (name) VALUES ($1) RETURNING id, name',
-                [tenantName]
-            );
-            const newTenant = tenantResult.rows[0];
+        // Begin transaction
+        await client.query('BEGIN');
 
-            const userResult = await db.query(
-                'INSERT INTO users (name, email, password_hash, tenant_id) VALUES ($1, $2, $3, $4) RETURNING id, name, email, tenant_id',
-                [name, email, passwordHash, newTenant.id]
-            );
-            const newUser = userResult.rows[0];
+        // Insert tenant
+        const tenantResult = await client.query(
+            'INSERT INTO tenants (name) VALUES ($1) RETURNING id, name',
+            [tenantName]
+        );
+        const newTenant = tenantResult.rows[0];
 
-            await db.query('COMMIT');
-            
-            const token = jwt.sign({ id: newUser.id, tenantId: newUser.tenant_id }, process.env.JWT_SECRET as string, { expiresIn: '1d' });
-            
-            res.status(201).json({ 
-                token, 
-                user: { id: newUser.id, name: newUser.name, email: newUser.email, tenantId: newUser.tenant_id },
-                tenant: { id: newTenant.id, name: newTenant.name }
-            });
+        // Insert user
+        const userResult = await client.query(
+            'INSERT INTO users (name, email, password_hash, tenant_id) VALUES ($1, $2, $3, $4) RETURNING id, name, email, tenant_id',
+            [name, email, passwordHash, newTenant.id]
+        );
+        const newUser = userResult.rows[0];
 
-        } catch (error) {
-            await db.query('ROLLBACK');
-            throw error;
-        }
+        // Commit transaction
+        await client.query('COMMIT');
+        
+        // Generate token
+        const token = jwt.sign({ id: newUser.id, tenantId: newUser.tenant_id }, process.env.JWT_SECRET as string, { expiresIn: '1d' });
+        
+        // Send response
+        res.status(201).json({ 
+            token, 
+            user: { id: newUser.id, name: newUser.name, email: newUser.email, tenantId: newUser.tenant_id },
+            tenant: { id: newTenant.id, name: newTenant.name }
+        });
+
     } catch (error) {
+        // Rollback transaction in case of error
+        await client.query('ROLLBACK');
         console.error('Registration error:', error);
         res.status(500).json({ message: 'Server error during registration.' });
+    } finally {
+        // Release the client back to the pool
+        client.release();
     }
 });
 
@@ -69,7 +80,7 @@ router.post('/login', async (req, res) => {
     }
 
     try {
-        const userResult = await db.query('SELECT * FROM users WHERE email = $1', [email]);
+        const userResult = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
         if (userResult.rows.length === 0) {
             return res.status(401).json({ message: 'Invalid email or password.' });
         }
@@ -80,7 +91,7 @@ router.post('/login', async (req, res) => {
             return res.status(401).json({ message: 'Invalid email or password.' });
         }
 
-        const tenantResult = await db.query('SELECT * FROM tenants WHERE id = $1', [user.tenant_id]);
+        const tenantResult = await pool.query('SELECT * FROM tenants WHERE id = $1', [user.tenant_id]);
         const tenant = tenantResult.rows[0];
 
         const token = jwt.sign({ id: user.id, tenantId: user.tenant_id }, process.env.JWT_SECRET as string, { expiresIn: '1d' });
@@ -101,13 +112,13 @@ router.post('/login', async (req, res) => {
 router.get('/me', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const userId = req.user?.id;
-        const userResult = await db.query('SELECT id, name, email, tenant_id FROM users WHERE id = $1', [userId]);
+        const userResult = await pool.query('SELECT id, name, email, tenant_id FROM users WHERE id = $1', [userId]);
         if (userResult.rows.length === 0) {
             return res.status(404).json({ message: 'User not found.' });
         }
         const user = userResult.rows[0];
         
-        const tenantResult = await db.query('SELECT id, name FROM tenants WHERE id = $1', [user.tenant_id]);
+        const tenantResult = await pool.query('SELECT id, name FROM tenants WHERE id = $1', [user.tenant_id]);
         const tenant = tenantResult.rows[0];
 
         res.json({ user, tenant });

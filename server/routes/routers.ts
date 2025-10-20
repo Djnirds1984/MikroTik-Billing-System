@@ -1,5 +1,5 @@
 import { Router as ExpressRouter } from 'express';
-import db from '../db';
+import pool from '../db';
 import authMiddleware, { AuthRequest } from '../authMiddleware';
 
 const router = ExpressRouter();
@@ -11,7 +11,7 @@ router.use(authMiddleware);
 router.get('/', async (req: AuthRequest, res) => {
     const tenantId = req.user?.tenantId;
     try {
-        const result = await db.query('SELECT id, name, ip, username FROM routers WHERE tenant_id = $1 ORDER BY created_at DESC', [tenantId]);
+        const result = await pool.query('SELECT id, name, ip, username FROM routers WHERE tenant_id = $1 ORDER BY created_at DESC', [tenantId]);
         res.json(result.rows);
     } catch (error) {
         console.error('Get routers error:', error);
@@ -29,7 +29,7 @@ router.post('/', async (req: AuthRequest, res) => {
     }
 
     try {
-        const result = await db.query(
+        const result = await pool.query(
             'INSERT INTO routers (name, ip, username, password, tenant_id) VALUES ($1, $2, $3, $4, $5) RETURNING id, name, ip, username',
             [name, ip, username, password, tenantId]
         );
@@ -51,7 +51,7 @@ router.put('/:id', async (req: AuthRequest, res) => {
     }
 
     try {
-        const result = await db.query(
+        const result = await pool.query(
             'UPDATE routers SET name = $1, ip = $2, username = $3, password = $4 WHERE id = $5 AND tenant_id = $6 RETURNING id, name, ip, username',
             [name, ip, username, password, id, tenantId]
         );
@@ -71,7 +71,7 @@ router.delete('/:id', async (req: AuthRequest, res) => {
     const { id } = req.params;
 
     try {
-        const result = await db.query('DELETE FROM routers WHERE id = $1 AND tenant_id = $2', [id, tenantId]);
+        const result = await pool.query('DELETE FROM routers WHERE id = $1 AND tenant_id = $2', [id, tenantId]);
         if (result.rowCount === 0) {
             return res.status(404).json({ message: 'Router not found or you do not have permission to delete it.' });
         }
