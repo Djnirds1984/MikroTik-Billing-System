@@ -8,7 +8,7 @@ interface AuthContextType {
   tenant: Tenant | null;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (name: string, email: string, password: string, tenantName: string) => Promise<void>;
+  register: (name: string, email: string, password: string, tenantName: string, securityQuestion: string, securityAnswer: string) => Promise<void>;
   logout: () => void;
 }
 
@@ -45,8 +45,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setIsAuthenticated(true);
   };
 
-  const register = async (name: string, email: string, password: string, tenantName: string) => {
-    const data = await api.register(name, email, password, tenantName);
+  const register = async (name: string, email: string, password: string, tenantName: string, securityQuestion: string, securityAnswer: string) => {
+    const data = await api.register(name, email, password, tenantName, securityQuestion, securityAnswer);
     setUser(data.user);
     setTenant(data.tenant);
     setIsAuthenticated(true);

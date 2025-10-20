@@ -2,11 +2,20 @@ import React, { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useRouter } from '../../contexts/RouterContext';
 
+const securityQuestions = [
+    "What was your first pet's name?",
+    "What is your mother's maiden name?",
+    "What was the name of your elementary school?",
+    "In what city were you born?",
+];
+
 export const Register: React.FC = () => {
     const [name, setName] = useState('');
     const [tenantName, setTenantName] = useState('');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [securityQuestion, setSecurityQuestion] = useState(securityQuestions[0]);
+    const [securityAnswer, setSecurityAnswer] = useState('');
     const [error, setError] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const { register } = useAuth();
@@ -17,7 +26,7 @@ export const Register: React.FC = () => {
         setError(null);
         setIsLoading(true);
         try {
-            await register(name, email, password, tenantName);
+            await register(name, email, password, tenantName, securityQuestion, securityAnswer);
             // App will redirect
         } catch (err: any) {
             setError(err.message || 'Failed to register. Please try again.');
@@ -48,6 +57,16 @@ export const Register: React.FC = () => {
                 <div>
                     <label htmlFor="password"className="block text-sm font-medium text-text-secondary mb-1">Password</label>
                     <input type="password" id="password" value={password} onChange={(e) => setPassword(e.target.value)} required className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary" />
+                </div>
+                <div>
+                    <label htmlFor="securityQuestion" className="block text-sm font-medium text-text-secondary mb-1">Security Question</label>
+                    <select id="securityQuestion" value={securityQuestion} onChange={(e) => setSecurityQuestion(e.target.value)} required className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary appearance-none">
+                        {securityQuestions.map(q => <option key={q} value={q}>{q}</option>)}
+                    </select>
+                </div>
+                <div>
+                    <label htmlFor="securityAnswer"className="block text-sm font-medium text-text-secondary mb-1">Security Answer</label>
+                    <input type="text" id="securityAnswer" value={securityAnswer} onChange={(e) => setSecurityAnswer(e.target.value)} required className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary" />
                 </div>
                 <button
                     type="submit"

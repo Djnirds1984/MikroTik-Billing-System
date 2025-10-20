@@ -9,9 +9,9 @@ const SALT_ROUNDS = 10;
 
 // POST /api/auth/register
 router.post('/register', async (req, res) => {
-    const { name, email, password, tenantName } = req.body;
+    const { name, email, password, tenantName, securityQuestion, securityAnswer } = req.body;
 
-    if (!name || !email || !password || !tenantName) {
+    if (!name || !email || !password || !tenantName || !securityQuestion || !securityAnswer) {
         return res.status(400).json({ message: 'All fields are required.' });
     }
     
@@ -27,8 +27,9 @@ router.post('/register', async (req, res) => {
             return res.status(409).json({ message: 'User with this email already exists.' });
         }
 
-        // Hash password
+        // Hash password and security answer
         const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
+        const securityAnswerHash = await bcrypt.hash(securityAnswer, SALT_ROUNDS);
 
         // Begin transaction
         await client.query('BEGIN');
@@ -42,8 +43,8 @@ router.post('/register', async (req, res) => {
 
         // Insert user
         const userResult = await client.query(
-            'INSERT INTO users (name, email, password_hash, tenant_id) VALUES ($1, $2, $3, $4) RETURNING id, name, email, tenant_id',
-            [name, email, passwordHash, newTenant.id]
+            'INSERT INTO users (name, email, password_hash, tenant_id, security_question, security_answer_hash) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, name, email, tenant_id',
+            [name, email, passwordHash, newTenant.id, securityQuestion, securityAnswerHash]
         );
         const newUser = userResult.rows[0];
 
@@ -126,6 +127,56 @@ router.get('/me', authMiddleware, async (req: AuthRequest, res) => {
     } catch (error) {
         console.error('Get current user error:', error);
         res.status(500).json({ message: 'Server error.' });
+    }
+});
+
+// POST /api/auth/security-question
+router.post('/security-question', async (req, res) => {
+    const { email } = req.body;
+    if (!email) {
+        return res.status(400).json({ message: 'Email is required.' });
+    }
+    try {
+        const userResult = await pool.query('SELECT security_question FROM users WHERE email = $1', [email]);
+        if (userResult.rows.length === 0) {
+            // To prevent email enumeration, we send a generic message.
+            // The frontend will handle this as a "user not found" scenario.
+            return res.status(404).json({ message: 'User not found.' });
+        }
+        res.json({ question: userResult.rows[0].security_question });
+    } catch (error) {
+        console.error('Get security question error:', error);
+        res.status(500).json({ message: 'Server error.' });
+    }
+});
+
+
+// POST /api/auth/reset-password
+router.post('/reset-password', async (req, res) => {
+    const { email, securityAnswer, newPassword } = req.body;
+    if (!email || !securityAnswer || !newPassword) {
+        return res.status(400).json({ message: 'All fields are required.' });
+    }
+    try {
+        const userResult = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
+        if (userResult.rows.length === 0) {
+            return res.status(404).json({ message: 'User not found.' });
+        }
+        const user = userResult.rows[0];
+
+        const isAnswerValid = await bcrypt.compare(securityAnswer, user.security_answer_hash);
+        if (!isAnswerValid) {
+            return res.status(401).json({ message: 'Incorrect security answer.' });
+        }
+
+        const newPasswordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
+        await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [newPasswordHash, user.id]);
+
+        res.json({ message: 'Password has been reset successfully.' });
+
+    } catch (error) {
+        console.error('Reset password error:', error);
+        res.status(500).json({ message: 'Server error during password reset.' });
     }
 });
 

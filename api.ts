@@ -41,10 +41,10 @@ interface AuthResponse {
     tenant: Tenant;
 }
 
-export const register = async (name: string, email: string, password: string, tenantName: string): Promise<AuthResponse> => {
+export const register = async (name: string, email: string, password: string, tenantName: string, securityQuestion: string, securityAnswer: string): Promise<AuthResponse> => {
     const data = await apiFetch('/auth/register', {
         method: 'POST',
-        body: JSON.stringify({ name, email, password, tenantName }),
+        body: JSON.stringify({ name, email, password, tenantName, securityQuestion, securityAnswer }),
     });
     localStorage.setItem('mikrotik_token', data.token);
     return data;
@@ -73,6 +73,20 @@ export const getCurrentUser = async (): Promise<{ user: User; tenant: Tenant } |
         logout(); // Token is invalid or expired
         return null;
     }
+};
+
+export const getSecurityQuestion = async (email: string): Promise<{ question: string }> => {
+    return apiFetch('/auth/security-question', {
+        method: 'POST',
+        body: JSON.stringify({ email }),
+    });
+};
+
+export const resetPassword = async (email: string, securityAnswer: string, newPassword: string): Promise<{ message: string }> => {
+    return apiFetch('/auth/reset-password', {
+        method: 'POST',
+        body: JSON.stringify({ email, securityAnswer, newPassword }),
+    });
 };
 
 
