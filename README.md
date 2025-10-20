@@ -21,18 +21,19 @@ This will install all the necessary dependencies for the backend listed in `pack
 
 ### 3. Set Up the Database
 
-1.  Open your PostgreSQL client (like `psql` or a GUI tool like DBeaver).
-2.  Create a new database for this project.
+This project features an automatic database installer. When you run the backend server for the first time, it will automatically create the database and tables for you.
 
+1.  **Ensure PostgreSQL is running.**
+
+2.  **Configure your `.env` file** with a PostgreSQL user that has permission to create databases. For local development, you can use the default `postgres` user, or create a dedicated one for better security.
+
+    *Example of creating a dedicated user:*
     ```sql
-    CREATE DATABASE mikrotik_billing;
+    -- Connect to psql
+    CREATE USER myuser WITH CREATEDB PASSWORD 'mysecretpassword';
     ```
 
-3.  Connect to your new database and run the schema script to create the necessary tables. You can do this by executing the contents of the `server/schema.sql` file.
-
-    ```bash
-    psql -d mikrotik_billing -f server/schema.sql
-    ```
+3.  **That's it!** The server will handle the rest upon startup. You no longer need to manually run `CREATE DATABASE` or execute the `schema.sql` file.
 
 ### 4. Configure Environment Variables
 

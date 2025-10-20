@@ -1,13 +1,13 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 
-// Fix: Changed interface to a type intersection to correctly inherit properties from express.Request.
-export type AuthRequest = Request & {
+// Fix: Changed type to an interface to ensure proper extension of express.Request, resolving multiple type errors.
+export interface AuthRequest extends Request {
     user?: {
         id: string;
         tenantId: string;
     };
-};
+}
 
 const authMiddleware = (req: AuthRequest, res: Response, next: NextFunction) => {
     const authHeader = req.headers.authorization;
