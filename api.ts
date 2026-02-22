@@ -4,7 +4,9 @@ const API_BASE_URL = 'http://localhost:4000/api'; // Your backend server URL
 
 const getToken = () => localStorage.getItem('mikrotik_token');
 
-const apiFetch = async (endpoint: string, options: RequestInit = {}) => {
+type ApiOptions = RequestInit & { timeoutMs?: number };
+
+const apiFetch = async (endpoint: string, options: ApiOptions = {}) => {
     const token = getToken();
     const headers = {
         'Content-Type': 'application/json',
@@ -15,10 +17,24 @@ const apiFetch = async (endpoint: string, options: RequestInit = {}) => {
         headers['Authorization'] = `Bearer ${token}`;
     }
 
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-        ...options,
-        headers,
-    });
+    const controller = new AbortController();
+    const timeout = options.timeoutMs ? setTimeout(() => controller.abort(), options.timeoutMs) : null;
+
+    let response: Response;
+    try {
+        response = await fetch(`${API_BASE_URL}${endpoint}`, {
+            ...options,
+            headers,
+            signal: controller.signal,
+        });
+    } catch (err: any) {
+        if (err?.name === 'AbortError') {
+            throw new Error('Request timed out. Please try again.');
+        }
+        throw err;
+    } finally {
+        if (timeout) clearTimeout(timeout);
+    }
 
     if (!response.ok) {
         const errorData = await response.json().catch(() => ({ message: 'An unknown error occurred.' }));
@@ -67,7 +83,7 @@ export const getCurrentUser = async (): Promise<{ user: User; tenant: Tenant } |
     const token = getToken();
     if (!token) return null;
     try {
-        return await apiFetch('/auth/me');
+        return await apiFetch('/auth/me', { timeoutMs: 3000 });
     } catch (error) {
         console.error("Session fetch failed, logging out.", error);
         logout(); // Token is invalid or expired
